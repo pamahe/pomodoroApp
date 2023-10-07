@@ -1,11 +1,11 @@
 from PySide6.QtWidgets import (
     QApplication,
-    QMainWindow,
     QWidget,
     QVBoxLayout,
     QLineEdit,
-    QPushButton
+    QPushButton,
 )
+from PySide6.QtCore import QEvent
 
 from pathlib import Path
 import sqlite3
@@ -17,7 +17,7 @@ USER = None
 DB = Path(__file__).parent / 'data' / 'database.db'
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.loginWindow = None
@@ -34,23 +34,50 @@ class MainWindow(QMainWindow):
         c.execute("""
         CREATE TABLE IF NOT EXISTS users
         (
-        	username text,
-        	password text
-        )
+            username text,
+            password text
+        );
         """)
         conn.commit()
         conn.close()
 
+    def event(self, event):
+        if event.type() == QEvent.WindowActivate:
+            print('WindowsActivate')
+            if USER:
+                self.setup()
+        return super().event(event)
+
     def get_logged_user(self):
         if not USER:
-            self.loginWindow = LoginWindow()
+            self.loginWindow = LoginWindow(self)
             self.loginWindow.show()
             self.loginWindow.activateWindow()
+        return True
+
+    def setup(self):
+        self.setup_config()
+        self.setup_ui()
+        self.setup_connexions()
+        self.update()
+
+    def setup_config(self):
+        pass
+
+    def setup_ui(self):
+        self.layout = QVBoxLayout(self)
+        self.le_username = QLineEdit(placeholderText="GOOD JOB !")
+
+        self.layout.addWidget(self.le_username)
+
+    def setup_connexions(self):
+        pass
 
 
 class LoginWindow(QWidget):
-    def __init__(self):
+    def __init__(self, caller: MainWindow):
         super().__init__()
+        self.caller = caller
         self.signupWindow = None
         self.setWindowTitle("Login")
         self.setup_ui()
@@ -73,17 +100,37 @@ class LoginWindow(QWidget):
         self.btn_signup.clicked.connect(self.signup)
 
     def login(self):
-        pass
+        global USER
+        username = self.le_username.text()
+        password = hashlib.sha256(self.le_password.text().encode()).hexdigest()
+
+        # Get user from database
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        d = {'username': username, 'hash': password}
+        c.execute("SELECT count(*) FROM users WHERE username=:username and password=:hash;", d)
+        result = c.fetchone()
+        conn.commit()
+        conn.close()
+
+        if result[0] == 0:
+            raise ValueError("Account not found")
+
+        USER = username
+        self.hide()
+        self.caller.update()
+        return True
 
     def signup(self):
-        self.signupWindow = SignUpWindow()
+        self.signupWindow = SignUpWindow(self)
         self.signupWindow.show()
         self.signupWindow.activateWindow()
 
 
 class SignUpWindow(QWidget):
-    def __init__(self):
+    def __init__(self, caller: LoginWindow):
         super().__init__()
+        self.caller = caller
         self.setWindowTitle("Sign Up")
         self.setup_ui()
         self.setup_connexions()
@@ -114,7 +161,6 @@ class SignUpWindow(QWidget):
         c = conn.cursor()
         c.execute("SELECT username from users")
         users = c.fetchall()
-        print(users)
         conn.commit()
         conn.close()
         if username in [t[0] for t in users]:
@@ -125,11 +171,13 @@ class SignUpWindow(QWidget):
         conn = sqlite3.connect(DB)
         c = conn.cursor()
         d = {'username': username, 'hash': hash}
-        c.execute("INSERT INTO users VALUES (:username, :hash)", d)
+        c.execute("INSERT INTO users VALUES (:username, :hash);", d)
         conn.commit()
         conn.close()
 
         self.hide()
+        self.caller.update()
+        return True
 
 
 def start_app():
