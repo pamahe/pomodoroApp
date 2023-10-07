@@ -7,7 +7,14 @@ from PySide6.QtWidgets import (
     QPushButton
 )
 
+from pathlib import Path
+import sqlite3
+import configparser
+import hashlib
+
+
 USER = None
+DB = Path(__file__).parent / 'data' / 'database.db'
 
 
 class MainWindow(QMainWindow):
@@ -15,7 +22,24 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.loginWindow = None
         self.setWindowTitle("Pomodoro App")
+        self.setup_database()
         self.get_logged_user()
+
+    @staticmethod
+    def setup_database():
+        DB.touch(mode=0o640, exist_ok=True)
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS users
+        (
+        	username text,
+        	password text
+        )
+        """)
+        conn.commit()
+        conn.close()
 
     def get_logged_user(self):
         if not USER:
@@ -77,10 +101,34 @@ class SignUpWindow(QWidget):
         self.layout.addWidget(self.btn_createAccount)
 
     def setup_connexions(self):
-        self.btn_createAccount.clicked.connect(self.createAccount)
+        self.btn_createAccount.clicked.connect(self.create_account)
 
-    def createAccount(self):
-        # TODO : new user logic
+    def create_account(self):
+        username = self.le_username.text()
+        if self.le_password.text() != self.le_confirmPassword.text():
+            raise ValueError("Passwords don't match")
+        password = self.le_password.text()
+
+        # Verify that username is available
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute("SELECT username from users")
+        users = c.fetchall()
+        print(users)
+        conn.commit()
+        conn.close()
+        if username in [t[0] for t in users]:
+            raise ValueError("Username not available")
+
+        # hash password
+        hash = hashlib.sha256(password.encode()).hexdigest()
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        d = {'username': username, 'hash': hash}
+        c.execute("INSERT INTO users VALUES (:username, :hash)", d)
+        conn.commit()
+        conn.close()
+
         self.hide()
 
 
