@@ -2,8 +2,12 @@ from PySide6.QtWidgets import (
     QApplication,
     QWidget,
     QVBoxLayout,
+    QGridLayout,
     QLineEdit,
     QPushButton,
+    QLCDNumber,
+    QProgressBar,
+    QCheckBox
 )
 from PySide6.QtCore import QEvent
 
@@ -22,6 +26,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.loginWindow = None
         self.setWindowTitle("Pomodoro App")
+        self.window_drawn = False
         self.setup_database()
         self.get_logged_user()
 
@@ -44,7 +49,8 @@ class MainWindow(QWidget):
     def event(self, event):
         if event.type() == QEvent.WindowActivate:
             print('WindowsActivate')
-            if USER:
+            if USER and not self.window_drawn:
+                self.window_drawn = True
                 self.setup()
         return super().event(event)
 
@@ -65,10 +71,51 @@ class MainWindow(QWidget):
         pass
 
     def setup_ui(self):
-        self.layout = QVBoxLayout(self)
-        self.le_username = QLineEdit(placeholderText="GOOD JOB !")
+        self.layout = QGridLayout(self)
 
-        self.layout.addWidget(self.le_username)
+        self.lcd_remainingTime = QLCDNumber()
+        self.pb_sessionProgress = QProgressBar()
+        self.btn_pause = QPushButton(text="Pause")
+        self.btn_settings = QPushButton(text="Settings")
+        self.btn_history = QPushButton(text="History")
+        self.btn_logout = QPushButton(text="Log Out")
+
+        # TODO : get values from config
+        dailypomodorosessions = 16
+        pomodorosessionssprint = 4
+
+        if dailypomodorosessions >= 16:
+            lcd_height = ((dailypomodorosessions // pomodorosessionssprint) +
+                          (dailypomodorosessions % pomodorosessionssprint))
+        else:
+            lcd_height = 4
+
+        if pomodorosessionssprint >= 4:
+            third_width = pomodorosessionssprint
+        else:
+            third_width = 4
+
+        self.layout.addWidget(self.lcd_remainingTime, 1, 1, lcd_height, 2 * third_width - 1)
+        self.layout.addWidget(self.pb_sessionProgress, 2 + lcd_height, 1, 1, 2 * third_width - 2)
+        self.layout.addWidget(self.btn_pause, 2 + lcd_height, 1 + 2 * third_width - 2, 1, 1)
+        self.layout.addWidget(self.btn_settings, 3 + lcd_height, 1, 1, third_width)
+        self.layout.addWidget(self.btn_history, 3 + lcd_height, 1 + third_width, 1, third_width)
+        self.layout.addWidget(self.btn_logout, 3 + lcd_height, 2 + 2 * third_width, 1, third_width)
+        # Organize the sessions grid on the right
+        sessions_checkboxes = []
+        for row in range(dailypomodorosessions // third_width):
+            for col in range(third_width):
+                checkbox = QCheckBox()
+                self.layout.addWidget(checkbox, 1 + row, 2 * third_width + 2 + col, 1, 1)
+                sessions_checkboxes.append(checkbox)
+        for rest in range(dailypomodorosessions % third_width):
+            print("In rest")
+            checkbox = QCheckBox()
+            self.layout.addWidget(checkbox, 1 + dailypomodorosessions // third_width,
+                                  2 * third_width + 2 + rest, 1, 1)
+            sessions_checkboxes.append(checkbox)
+
+
 
     def setup_connexions(self):
         pass
