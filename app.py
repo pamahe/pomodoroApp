@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLCDNumber,
     QProgressBar,
-    QCheckBox
+    QCheckBox,
+    QLabel
 )
 from PySide6.QtCore import QEvent
 
@@ -28,6 +29,7 @@ class MainWindow(QWidget):
         self.loginWindow = None
         self.setWindowTitle("Pomodoro App")
         self.window_drawn = False
+        self.layout = QGridLayout(self)
         self.setup_database()
         self.get_logged_user()
 
@@ -49,13 +51,17 @@ class MainWindow(QWidget):
 
     def event(self, event):
         if event.type() == QEvent.WindowActivate:
-            print('WindowsActivate')
             if USER and not self.window_drawn:
                 self.window_drawn = True
                 self.setup()
         return super().event(event)
 
+    def redraw_window(self):
+        self.clear_layout()
+        self.setup()
+
     def get_logged_user(self):
+        global USER
         if not USER:
             self.loginWindow = LoginWindow(self)
             self.loginWindow.show()
@@ -63,16 +69,17 @@ class MainWindow(QWidget):
         return True
 
     def setup(self):
-        self.setup_config()
         self.setup_ui()
         self.setup_connexions()
         self.update()
 
     def setup_config(self):
-        pass
+        config = configparser.ConfigParser()
+        config.read(CONFIG)
+        return config
 
     def setup_ui(self):
-        self.layout = QGridLayout(self)
+        config = self.setup_config()
 
         self.lcd_remainingTime = QLCDNumber()
         self.pb_sessionProgress = QProgressBar()
@@ -81,9 +88,12 @@ class MainWindow(QWidget):
         self.btn_history = QPushButton(text="History")
         self.btn_logout = QPushButton(text="Log Out")
 
-        # TODO : get values from config
-        dailypomodorosessions = 16
-        pomodorosessionssprint = 4
+        if not USER:
+            dailypomodorosessions = int(config['DEFAULT']['dailypomodorosessions'])
+            pomodorosessionssprint = int(config['DEFAULT']['pomodorosessionssprint'])
+        else:
+            dailypomodorosessions = int(config[f'{USER.upper()}']['dailypomodorosessions'])
+            pomodorosessionssprint = int(config[f'{USER.upper()}']['pomodorosessionssprint'])
 
         if dailypomodorosessions >= 16:
             lcd_height = ((dailypomodorosessions // pomodorosessionssprint) +
@@ -110,16 +120,36 @@ class MainWindow(QWidget):
                 self.layout.addWidget(checkbox, 1 + row, 2 * third_width + 2 + col, 1, 1)
                 sessions_checkboxes.append(checkbox)
         for rest in range(dailypomodorosessions % third_width):
-            print("In rest")
             checkbox = QCheckBox()
             self.layout.addWidget(checkbox, 1 + dailypomodorosessions // third_width,
                                   2 * third_width + 2 + rest, 1, 1)
             sessions_checkboxes.append(checkbox)
 
-
-
     def setup_connexions(self):
+        self.btn_pause.clicked.connect(self.pause)
+        self.btn_settings.clicked.connect(self.goto_settings)
+        self.btn_history.clicked.connect(self.goto_history)
+        self.btn_logout.clicked.connect(self.logout)
+
+    def pause(self):
         pass
+
+    def goto_settings(self):
+        self.SettingWindow = SettingsWindow(self)
+        self.SettingWindow.show()
+        self.SettingWindow.activateWindow()
+
+    def goto_history(self):
+        pass
+
+    def logout(self):
+        pass
+
+    def clear_layout(self):
+        while self.layout.count():
+            child = self.layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
 
 
 class LoginWindow(QWidget):
@@ -237,6 +267,66 @@ class SignUpWindow(QWidget):
             for line in config_lines:
                 f.write(line)
         return None
+
+
+class SettingsWindow(QWidget):
+    def __init__(self, caller: MainWindow):
+        super().__init__()
+        self.caller = caller
+        self.setWindowTitle("Settings")
+        self.setup_ui()
+        self.setup_connexions()
+
+    def setup_ui(self):
+        global USER
+        self.layout = QGridLayout(self)
+
+        self.qte_dps = QLabel(text="Daily Pomodoro Sessions")
+        self.qte_pss = QLabel(text="Pomodoro Sessions Sprint")
+        self.qte_psd = QLabel(text="Pomodoro Session Duration (min)")
+        self.qte_smd = QLabel(text="Sessions Break Duration (min)")
+        self.qte_bbd = QLabel(text="Sprint Break Duration (min)")
+
+        config = self.caller.setup_config()
+        self.le_dps = QLineEdit()
+        self.le_pss = QLineEdit()
+        self.le_psd = QLineEdit()
+        self.le_smd = QLineEdit()
+        self.le_bbd = QLineEdit()
+        self.le_dps.setText(config[USER.upper()]["dailypomodorosessions"])
+        self.le_pss.setText(config[USER.upper()]["pomodorosessionssprint"])
+        self.le_psd.setText(config[USER.upper()]["pomodorosessionduration"])
+        self.le_smd.setText(config[USER.upper()]["smallbreakduration"])
+        self.le_bbd.setText(config[USER.upper()]["bigbreakduration"])
+
+        self.layout.addWidget(self.qte_dps, 1, 1)
+        self.layout.addWidget(self.qte_pss, 2, 1)
+        self.layout.addWidget(self.qte_psd, 3, 1)
+        self.layout.addWidget(self.qte_smd, 4, 1)
+        self.layout.addWidget(self.qte_bbd, 5, 1)
+        self.layout.addWidget(self.le_dps, 1, 2)
+        self.layout.addWidget(self.le_pss, 2, 2)
+        self.layout.addWidget(self.le_psd, 3, 2)
+        self.layout.addWidget(self.le_smd, 4, 2)
+        self.layout.addWidget(self.le_bbd, 5, 2)
+
+        self.btn_savesettings = QPushButton(text="Save Settings")
+        self.layout.addWidget(self.btn_savesettings, 6, 1)
+
+    def setup_connexions(self):
+        self.btn_savesettings.clicked.connect(self.save_settings)
+
+    def save_settings(self):
+        config = self.caller.setup_config()
+        config.set(f"{USER.upper()}", "dailypomodorosessions", self.le_dps.text())
+        config.set(f"{USER.upper()}", "pomodorosessionssprint", self.le_pss.text())
+        config.set(f"{USER.upper()}", "pomodorosessionduration", self.le_psd.text())
+        config.set(f"{USER.upper()}", "smallbreakduration", self.le_smd.text())
+        config.set(f"{USER.upper()}", "bigbreakduration", self.le_bbd.text())
+        with open(CONFIG, 'w') as configfile:
+            config.write(configfile)
+        self.hide()
+        self.caller.redraw_window()
 
 
 def start_app():
