@@ -19,6 +19,7 @@ import hashlib
 
 USER = None
 DB = Path(__file__).parent / 'data' / 'database.db'
+CONFIG = Path(__file__).parent / 'data' / 'config.ini'
 
 
 class MainWindow(QWidget):
@@ -222,9 +223,20 @@ class SignUpWindow(QWidget):
         conn.commit()
         conn.close()
 
+        self.create_user_config(username)
+
         self.hide()
         self.caller.update()
         return True
+
+    def create_user_config(self, username):
+        with (open(CONFIG, 'a') as f):
+            config_lines = [
+                f"[{username.upper()}]\n", "dailypomodorosessions = 8\n", "pomodorosessionssprint = 4\n",
+                "pomodorosessionduration = 25\n", "smallbreakduration = 5\n", "bigbreakduration = 30\n"]
+            for line in config_lines:
+                f.write(line)
+        return None
 
 
 def start_app():
